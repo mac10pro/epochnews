@@ -15,7 +15,6 @@ const client = new Client({
 const MARKDOWN_FILE = 'logs.md';
 const FOLLOWED_CHANNEL_ID = process.env.DISCORD_CHANNEL_ID;
 
-
 const git = simpleGit();
 
 http.createServer((req, res) => {
@@ -68,14 +67,20 @@ client.on('messageCreate', async (msg) => {
 
   try {
     fs.writeFileSync(MARKDOWN_FILE, updatedContent);
+    console.log('File content now:', updatedContent.substring(0, 200));
 
     await git.add(MARKDOWN_FILE);
     await git.commit(`Log update from ${msg.author.username} at ${timestamp}`);
     await git.push('origin', 'main');
 
-    console.log('✅ Updated logs.md and pushed to GitHub');
+    if (msg.content.length <= 100) {
+        console.log(`New post: ${msg.content}`);
+    } else {
+        console.log(`New post from ${msg.author.username} (too long to display) — see latest entry in logs.md on GitHub`);
+    }
+
   } catch (err) {
-    console.error('❌ Failed to update or push logs:', err);
+    console.error('Failed to update or push logs:', err);
   }
 });
 
