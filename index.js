@@ -74,26 +74,38 @@ client.on('messageCreate', async (msg) => {
   const updatedContent = newEntry + oldContent;
 
   try {
-    fs.writeFileSync(MARKDOWN_FILE, updatedContent);
-    console.log('File content now:', updatedContent.substring(0, 200));
+  // Pull latest changes first (rebase)
+  await git.pull('origin', 'main', { '--rebase': 'true' });
 
-    // await git.add(MARKDOWN_FILE);
-    await git.add(['-f', MARKDOWN_FILE]);
-
-    await git.commit(`Log update from ${msg.author.username} at ${timestamp}`);
-
-    await git.pull('origin', 'main', {'--rebase': 'true'});
-
-    await git.push('origin', 'main');
-
-    if (msg.content.length <= 100) {
-      console.log(`New post: ${msg.content}`);
-    } else {
-      console.log(`New post from ${msg.author.username} (too long to display) — see latest entry in logs.md on GitHub`);
-    }
+  // Now read the latest file again (to avoid race condition)
+  let oldContent = '';
+  try {
+    oldContent = fs.readFileSync(MARKDOWN_FILE, 'utf8');
   } catch (err) {
-    console.error('Failed to update or push logs:', err);
+    if (err.code !== 'ENOENT') {
+      console.error('Error reading logs.md:', err);
+      return;
+    }
   }
+
+  const updatedContent = newEntry + oldContent;
+  fs.writeFileSync(MARKDOWN_FILE, updatedContent);
+
+  // Stage and commit your updated file
+  await git.add(['-f', MARKDOWN_FILE]);
+  await git.commit(`Log update from ${msg.author.username} at ${timestamp}`);
+
+  // Push your commit
+  await git.push('origin', 'main');
+
+  if (msg.content.length <= 100) {
+    console.log(`New post: ${msg.content}`);
+  } else {
+    console.log(`New post from ${msg.author.username} (too long to display) — see latest entry in logs.md on GitHub`);
+  }
+} catch (err) {
+  console.error('Failed to update or push logs:', err);
+}
 });
 
 client.login(process.env.DISCORD_TOKEN);
