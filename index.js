@@ -27,16 +27,25 @@ http.createServer((req, res) => {
 async function setupGitConfig() {
   await git.addConfig('user.name', process.env.GITHUB_USERNAME || 'github-actions');
   await git.addConfig('user.email', process.env.GITHUB_EMAIL || 'github-actions@example.com');
-  // Set remote URL with token for auth:
+
   const remoteUrl = `https://${process.env.GITHUB_USERNAME}:${process.env.GITHUB_TOKEN}@github.com/${process.env.GITHUB_USERNAME}/${process.env.GITHUB_REPO}.git`;
-  await git.removeRemote('origin').catch(() => {});
+  console.log('Using remote URL:', remoteUrl);
+
+  try {
+    await git.removeRemote('origin');
+  } catch {
+    console.log('No existing remote to remove.');
+  }
+
   await git.addRemote('origin', remoteUrl);
+  console.log('Git remote configured.');
 }
 
 client.once('ready', async () => {
   console.log(`Logged in as ${client.user.tag}`);
   await setupGitConfig();
 });
+
 client.on('messageCreate', async (msg) => {
   console.log(`Received message from ${msg.author.username} in channel ${msg.channel.id}`);
 
@@ -48,7 +57,6 @@ client.on('messageCreate', async (msg) => {
     console.log(`Ignored bot message from ${msg.author.username}`);
     return;
   }
-
 
   const timestamp = new Date().toISOString();
   const newEntry = `\n--------------\n\n### ${timestamp}\n\n- **${msg.author.username}**: ${msg.content}\n`;
@@ -71,14 +79,16 @@ client.on('messageCreate', async (msg) => {
 
     await git.add(MARKDOWN_FILE);
     await git.commit(`Log update from ${msg.author.username} at ${timestamp}`);
+
+    await git.pull('origin', 'main', {'--rebase': 'true'});
+
     await git.push('origin', 'main');
 
     if (msg.content.length <= 100) {
-        console.log(`New post: ${msg.content}`);
+      console.log(`New post: ${msg.content}`);
     } else {
-        console.log(`New post from ${msg.author.username} (too long to display) — see latest entry in logs.md on GitHub`);
+      console.log(`New post from ${msg.author.username} (too long to display) — see latest entry in logs.md on GitHub`);
     }
-
   } catch (err) {
     console.error('Failed to update or push logs:', err);
   }
