@@ -37,6 +37,19 @@ async function setupGitConfig() {
 
   await git.addRemote('origin', remoteUrl);
   console.log('Git remote configured.');
+
+  // Explicitly checkout main branch to avoid detached HEAD
+  try {
+    await git.checkout('main');
+    console.log('Checked out branch main');
+  } catch (err) {
+    console.log('Branch main not found, creating it...');
+    await git.checkoutLocalBranch('main');
+  }
+
+  // Pull latest main with rebase
+  await git.pull('origin', 'main', { '--rebase': 'true' });
+  console.log('Pulled latest changes from origin/main');
 }
 
 client.once('ready', async () => {
@@ -45,50 +58,45 @@ client.once('ready', async () => {
 });
 
 client.on('messageCreate', async (msg) => {
-  console.log(`Received message from ${msg.author.username} in channel ${msg.channel.id}`);
-
-  if (msg.channel.id !== FOLLOWED_CHANNEL_ID) {
-    console.log(`Ignored message in channel ${msg.channel.id}`);
-    return;
-  }
-  if (msg.author.bot) {
-    console.log(`Ignored bot message from ${msg.author.username}`);
-    return;
-  }
-
-  const timestamp = new Date().toISOString();
-  const safeTimestamp = timestamp.replace(/:/g, '-');
-  const dir = 'logs';
-  const fileName = `${dir}/${safeTimestamp}.md`;
-  const content = `### ${timestamp}\n\n- **${msg.author.username}**: ${msg.content}\n`;
-
   try {
-    // Ensure logs directory exists
+    if (msg.channel.id !== FOLLOWED_CHANNEL_ID) return;
+    if (msg.author.bot) return;
+
+    console.log(`Received message from ${msg.author.username} in channel ${msg.channel.id}`);
+
+    const timestamp = new Date().toISOString();
+    const safeTimestamp = timestamp.replace(/:/g, '-');
+    const dir = 'logs';
+    const fileName = `${dir}/${safeTimestamp}.md`;
+    const content = `### ${timestamp}\n\n- **${msg.author.username}**: ${msg.content}\n`;
+
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir);
       console.log(`Created directory: ${dir}`);
     }
 
-    // Pull latest from remote
+    // Pull latest changes before writing to avoid conflicts
     await git.pull('origin', 'main', { '--rebase': 'true' });
 
-    // Write new log file
     fs.writeFileSync(fileName, content);
     console.log(`Created log file: ${fileName}`);
 
-    // Stage, commit, and push
     await git.add(['-f', fileName]);
     console.log(`Added file ${fileName} to git staging area`);
 
-    const commitSummary = await git.commit(`Log update from ${msg.author.username} at ${timestamp}`);
-    console.log('Commit summary:', commitSummary);
+    await git.commit(`Log update from ${msg.author.username} at ${timestamp}`);
+    console.log('Committed log file');
 
-    const pushSummary = await git.push('origin', 'main');
-    console.log('Push summary:', pushSummary);
+    await git.push('origin', 'main');
+    console.log('Pushed log file to GitHub');
 
-    console.log('✅ Log file committed and pushed to GitHub');
+    if (msg.content.length <= 100) {
+      console.log(`New post: ${msg.content}`);
+    } else {
+      console.log(`New post from ${msg.author.username} (too long to display) — see latest log file on GitHub`);
+    }
   } catch (err) {
-    console.error('Failed to update or push logs:', err);
+    console.error('Error handling message:', err);
   }
 });
 
