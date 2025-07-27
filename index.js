@@ -12,9 +12,7 @@ const client = new Client({
   ],
 });
 
-const MARKDOWN_FILE = 'logs.md';
 const FOLLOWED_CHANNEL_ID = process.env.DISCORD_CHANNEL_ID;
-
 const git = simpleGit();
 
 http.createServer((req, res) => {
@@ -59,53 +57,39 @@ client.on('messageCreate', async (msg) => {
   }
 
   const timestamp = new Date().toISOString();
-  const newEntry = `\n--------------\n\n### ${timestamp}\n\n- **${msg.author.username}**: ${msg.content}\n`;
+  const safeTimestamp = timestamp.replace(/:/g, '-');
+  const dir = 'logs';
+  const fileName = `${dir}/${safeTimestamp}.md`;
 
-  let oldContent = '';
+  const content = `### ${timestamp}\n\n- **${msg.author.username}**: ${msg.content}\n`;
+
   try {
-    oldContent = fs.readFileSync(MARKDOWN_FILE, 'utf8');
-  } catch (err) {
-    if (err.code !== 'ENOENT') {
-      console.error('Error reading logs.md:', err);
-      return;
+    // Ensure logs directory exists
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir);
+      console.log(`Created directory: ${dir}`);
     }
-  }
 
-  const updatedContent = newEntry + oldContent;
+    // Pull latest changes before adding new file (rebase)
+    await git.pull('origin', 'main', { '--rebase': 'true' });
 
-  try {
-  // Pull latest changes first (rebase)
-  await git.pull('origin', 'main', { '--rebase': 'true' });
+    // Write new message log file
+    fs.writeFileSync(fileName, content);
+    console.log(`Created new log file: ${fileName}`);
 
-  // Now read the latest file again (to avoid race condition)
-  let oldContent = '';
-  try {
-    oldContent = fs.readFileSync(MARKDOWN_FILE, 'utf8');
-  } catch (err) {
-    if (err.code !== 'ENOENT') {
-      console.error('Error reading logs.md:', err);
-      return;
+    // Add, commit, and push new file
+    await git.add([fileName]);
+    await git.commit(`Add log from ${msg.author.username} at ${timestamp}`);
+    await git.push('origin', 'main');
+
+    if (msg.content.length <= 100) {
+      console.log(`New post: ${msg.content}`);
+    } else {
+      console.log(`New post from ${msg.author.username} (too long to display) — see latest entry in logs/ folder on GitHub`);
     }
+  } catch (err) {
+    console.error('Failed to create or push log file:', err);
   }
-
-  const updatedContent = newEntry + oldContent;
-  fs.writeFileSync(MARKDOWN_FILE, updatedContent);
-
-  // Stage and commit your updated file
-  await git.add(['-f', MARKDOWN_FILE]);
-  await git.commit(`Log update from ${msg.author.username} at ${timestamp}`);
-
-  // Push your commit
-  await git.push('origin', 'main');
-
-  if (msg.content.length <= 100) {
-    console.log(`New post: ${msg.content}`);
-  } else {
-    console.log(`New post from ${msg.author.username} (too long to display) — see latest entry in logs.md on GitHub`);
-  }
-} catch (err) {
-  console.error('Failed to update or push logs:', err);
-}
 });
 
 client.login(process.env.DISCORD_TOKEN);
