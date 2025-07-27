@@ -60,7 +60,6 @@ client.on('messageCreate', async (msg) => {
   const safeTimestamp = timestamp.replace(/:/g, '-');
   const dir = 'logs';
   const fileName = `${dir}/${safeTimestamp}.md`;
-
   const content = `### ${timestamp}\n\n- **${msg.author.username}**: ${msg.content}\n`;
 
   try {
@@ -70,25 +69,26 @@ client.on('messageCreate', async (msg) => {
       console.log(`Created directory: ${dir}`);
     }
 
-    // Pull latest changes before adding new file (rebase)
+    // Pull latest from remote
     await git.pull('origin', 'main', { '--rebase': 'true' });
 
-    // Write new message log file
+    // Write new log file
     fs.writeFileSync(fileName, content);
-    console.log(`Created new log file: ${fileName}`);
+    console.log(`Created log file: ${fileName}`);
 
-    // Add, commit, and push new file
-    await git.add([fileName]);
-    await git.commit(`Add log from ${msg.author.username} at ${timestamp}`);
-    await git.push('origin', 'main');
+    // Stage, commit, and push
+    await git.add(['-f', fileName]);
+    console.log(`Added file ${fileName} to git staging area`);
 
-    if (msg.content.length <= 100) {
-      console.log(`New post: ${msg.content}`);
-    } else {
-      console.log(`New post from ${msg.author.username} (too long to display) — see latest entry in logs/ folder on GitHub`);
-    }
+    const commitSummary = await git.commit(`Log update from ${msg.author.username} at ${timestamp}`);
+    console.log('Commit summary:', commitSummary);
+
+    const pushSummary = await git.push('origin', 'main');
+    console.log('Push summary:', pushSummary);
+
+    console.log('✅ Log file committed and pushed to GitHub');
   } catch (err) {
-    console.error('Failed to create or push log file:', err);
+    console.error('Failed to update or push logs:', err);
   }
 });
 
