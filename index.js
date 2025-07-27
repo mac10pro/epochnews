@@ -77,7 +77,9 @@ client.on('messageCreate', async (msg) => {
     fs.writeFileSync(MARKDOWN_FILE, updatedContent);
     console.log('File content now:', updatedContent.substring(0, 200));
 
-    await git.add(MARKDOWN_FILE);
+    // await git.add(MARKDOWN_FILE);
+    await git.add(['-f', MARKDOWN_FILE]);
+
     await git.commit(`Log update from ${msg.author.username} at ${timestamp}`);
 
     await git.pull('origin', 'main', {'--rebase': 'true'});
